@@ -5,7 +5,7 @@ import autoprefixer from 'autoprefixer';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/setxuifl/flood-sensor-optimization/',
+  base: process.env.BASE_URL || '/',
   plugins: [react()],
   css: {
     postcss: {
