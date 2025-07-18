@@ -32,8 +32,6 @@ jobs:
 
       - name: Build project
         run: npm run build
-        env:
-          BASE_URL: /bethel-flood-visualizer/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
