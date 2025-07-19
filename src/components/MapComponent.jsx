@@ -5,18 +5,10 @@ import 'leaflet-defaulticon-compatibility';
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css';
 import parseGeoraster from 'georaster';
 import GeoRasterLayer from 'georaster-layer-for-leaflet';
-import proj4 from 'proj4';
+import proj4 from 'proj4-fully-loaded';
 import Legend from './Legend'; 
 import { purpleGradientColors, visualizationOptions, formatLegendNumber } from '../utils/mapConstants';
 import { useLegend } from './hooks/useLegend';
-
-
-// Force proj4 and its `defs` function to be included in the production bundle.
-// This is a workaround for tree-shaking issues with some libraries.
-// WGS84 (standard lat/lon, likely the projection of the GeoTIFFs)
-proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
-// Web Mercator (used by OpenStreetMap and other web maps)
-proj4.defs("EPSG:3857", "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs");
 
 const MapComponent = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
