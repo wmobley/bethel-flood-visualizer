@@ -3,9 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-defaulticon-compatibility';
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css';
-import parseGeoraster from 'georaster';
-import GeoRasterLayer from 'georaster-layer-for-leaflet';
-import proj4 from 'proj4-fully-loaded';
+import { fromArrayBuffer } from 'geotiff';
 import Legend from './Legend'; 
 import { purpleGradientColors, visualizationOptions, formatLegendNumber } from '../utils/mapConstants';
 import { useLegend } from './hooks/useLegend';
@@ -51,7 +49,7 @@ const MapComponent = () => {
   }, [selectedRaster]);
 
   useEffect(() => {
-    if (!mapRef.current || !tiffData || !tiffData.georaster) return;
+    if (!mapRef.current || !tiffData || !tiffData.geotiff) return;
 
     if (currentLayerRef.current) {
       try {
@@ -63,48 +61,78 @@ const MapComponent = () => {
       }
     }
 
-    try {
-      const georaster = tiffData.georaster;
-      const min = -2;
-      const max = 0.2;
-      const range = max - min;
-      const numColors = purpleGradientColors.length;
+    const renderTiffOverlay = async () => {
+      try {
+        const geotiff = tiffData.geotiff;
+        const image = await geotiff.getImage();
+        const bbox = image.getBoundingBox();
+        const [xmin, ymin, xmax, ymax] = bbox;
+        const imageBounds = [[ymin, xmin], [ymax, xmax]];
 
-      const pixelValuesToColorFn = values => {
-        const pixelValue = values[0];
+        const rasters = await image.readRasters({ interleave: true });
+        const width = image.getWidth();
+        const height = image.getHeight();
 
-        if (pixelValue === undefined || pixelValue === null || isNaN(pixelValue) || pixelValue < min) {
-          return null; // transparent
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d');
+        const imageData = context.createImageData(width, height);
+        const data = imageData.data;
+
+        const min = -2;
+        const max = 0.2;
+        const range = max - min;
+
+        const hexToRgb = (hex) => {
+          const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+          return result ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)] : null;
+        };
+        const colorRamp = purpleGradientColors.map(hexToRgb);
+        const numColors = colorRamp.length;
+
+        for (let i = 0; i < rasters.length; i++) {
+          const pixelValue = rasters[i];
+          const j = i * 4;
+
+          if (pixelValue === undefined || isNaN(pixelValue) || pixelValue < min) {
+            data[j + 3] = 0; // Set alpha to 0 for transparent
+          } else {
+            const clampedValue = Math.max(min, Math.min(max, pixelValue));
+            const normalized = (clampedValue - min) / range;
+            const colorIndex = Math.min(numColors - 1, Math.floor(normalized * numColors));
+            const color = colorRamp[colorIndex];
+
+            if (color) {
+              data[j] = color[0];     // R
+              data[j + 1] = color[1]; // G
+              data[j + 2] = color[2]; // B
+              data[j + 3] = 255 * 0.7; // Alpha (with 70% opacity)
+            } else {
+              data[j + 3] = 0; // Fallback to transparent
+            }
+          }
         }
 
-        const clampedValue = Math.max(min, Math.min(max, pixelValue));
-        const normalized = (clampedValue - min) / range;
+        context.putImageData(imageData, 0, 0);
+        const dataUrl = canvas.toDataURL();
 
-        if (normalized === 1) {
-          return purpleGradientColors[numColors - 1];
-        }
+        const overlay = L.imageOverlay(dataUrl, imageBounds, {
+          opacity: 1, // Opacity is now baked into the image data
+          interactive: false,
+        });
 
-        const colorIndex = Math.floor(normalized * numColors);
-        return purpleGradientColors[colorIndex];
-      };
-      const layer = new GeoRasterLayer({
-        georaster,
-        opacity: 0.7,
-        resolution: 256,
-        pixelValuesToColorFn,
-        proj4,
-      });
-      layer.addTo(mapRef.current);
-      currentLayerRef.current = layer;
+        overlay.addTo(mapRef.current);
+        currentLayerRef.current = overlay;
+        mapRef.current.fitBounds(imageBounds);
 
-      const bounds = [
-        [georaster.ymin, georaster.xmin],
-        [georaster.ymax, georaster.xmax]
-      ];
-      mapRef.current.fitBounds(bounds);
-    } catch (error) {
-      console.error('Error adding GeoTIFF layer:', error);
-    }
+      } catch (err) {
+        console.error("Error rendering GeoTIFF to image overlay:", err);
+        setError("Could not render the selected raster. It may be in an unsupported format.");
+      }
+    };
+
+    renderTiffOverlay();
   }, [tiffData]);
 
   useEffect(() => {
@@ -234,10 +262,10 @@ const MapComponent = () => {
         }
         
         const arrayBuffer = await response.arrayBuffer();
-        const georaster = await parseGeoraster(arrayBuffer);
+        const geotiff = await fromArrayBuffer(arrayBuffer);
         
         setTiffData({
-          georaster,
+          geotiff,
           info: rasterResource,
           isActualData: true
         });
