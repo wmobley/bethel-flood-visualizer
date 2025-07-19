@@ -5,6 +5,7 @@ import 'leaflet-defaulticon-compatibility';
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css';
 import parseGeoraster from 'georaster';
 import GeoRasterLayer from 'georaster-layer-for-leaflet';
+import proj4 from 'proj4';
 import Legend from './Legend'; 
 import { purpleGradientColors, visualizationOptions, formatLegendNumber } from '../utils/mapConstants';
 import { useLegend } from './hooks/useLegend';
@@ -51,7 +52,7 @@ const MapComponent = () => {
   }, [selectedRaster]);
 
   useEffect(() => {
-    if (!mapRef.current || !tiffData) return;
+    if (!mapRef.current || !tiffData || !tiffData.georaster) return;
 
     if (currentLayerRef.current) {
       try {
@@ -92,6 +93,7 @@ const MapComponent = () => {
         opacity: 0.7,
         resolution: 256,
         pixelValuesToColorFn,
+        proj4,
       });
       layer.addTo(mapRef.current);
       currentLayerRef.current = layer;
